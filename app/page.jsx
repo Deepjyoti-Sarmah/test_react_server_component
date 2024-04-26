@@ -1,17 +1,6 @@
 import { getAll } from "../data/db.js";
 import { Suspense } from 'react';
-
-export default function Page() {
-    return (
-        <>
-            <h1 className='text-3xl mb-3'>Spotifn't</h1>
-            <Suspense fallback={<p>Loading...</p>}>
-                <Albums />
-            </Suspense>
-        </>
-
-    );
-}
+import Like from "./Like.jsx";
 
 async function Albums() {
     const albums = await getAll();
@@ -23,9 +12,23 @@ async function Albums() {
                     <div>
                         <h3 className="text-xl">{a.title}</h3>
                         <p>{a.songs.length} songs</p>
+                        <Like />
                     </div>
                 </li>
             ))}
         </ul>
     );
 }
+
+export default function Page() {
+    return (
+        <>
+            <h1 className='text-3xl mb-3'>Spotifn't</h1>
+            <Suspense fallback={<p>Loading...</p>}>
+                {/* @ts-expect-error 'Promise<Element>' is not a valid JSX element. */}
+                <Albums />
+            </Suspense>
+        </>
+    );
+}
+

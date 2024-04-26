@@ -6,8 +6,13 @@ import { renderToString } from "react-dom/server";
 import { createElement } from "react";
 import * as ReactServerDom from "react-server-dom-webpack/server.browser";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { readFile, writeFile } from 'node:fs/promises';
+import { parse } from "es-module-lexer";
+import { relative } from "node:path";
 
 const app = new Hono();
+
+const clientComponentMap = {};
 
 app.get("/", async (c) => {
     return c.html(`
@@ -29,7 +34,7 @@ app.use("/build/*", serveStatic());
 
 app.get("/rsc", async (c) => {
     const Page = await import("./build/page.js");
-    const stream = ReactServerDom.renderToReadableStream(createElement(Page.default));
+    const stream = ReactServerDom.renderToReadableStream(createElement(Page.default), clientComponentMap);
     return new Response(stream);
 });
 
@@ -39,6 +44,9 @@ serve(app, async (info) => {
 });
 
 async function build() {
+
+    const clientEntryPoints = new Set();
+
     await esbuild ({
         bundle: true,
         format: "esm",
@@ -46,17 +54,59 @@ async function build() {
         entryPoints: [resolveApp("page.jsx")],
         outdir: resolveBuild(),
         //avoid bunding  npm pagckages
-        packages: "external"
+        packages: "external",
+        plugins: [
+            {
+                name: 'resolve-client-imports',
+                setup(build) {
+                    //Intercept component imports to find client entry points
+                    build.onResolve({ filter: /\.jsx$/}, async ({path: relativePath}) => {
+                        const path = resolveApp(relativePath);
+                        const contents = await readFile(path, "utf8");
+                        if (contents.startsWith("'use client'")) {
+                            clientEntryPoints.add(path);
+                            return {
+                                external: true,
+                                path: relativePath.replace(/\.jsx$/, ".js"),
+                            };
+                        }
+                    });
+                }
+            }
+        ]
     });
 
-    await esbuild ({
+    const {outputFiles} = await esbuild ({
         bundle: true,
         format: "esm",
         logLevel: "error",
-        entryPoints: [resolveApp("_client.jsx")],
+        entryPoints: [resolveApp("_client.jsx"), ...clientEntryPoints],
         outdir: resolveBuild(),
         splitting: true,
-        plugins: []
+        plugins: [],
+        write: false
+    });
+
+    outputFiles.forEach(async (file) => {
+        const [, exports] = parse(file.text);
+        let newContents = file.text;
+
+        for (const exp of exports) {
+            const key = file.path + exp.n;
+
+            clientComponentMap[key] = {
+                id: `/build/${relative(resolveBuild(), file.path)}`,
+                name: exp.n,
+                chunks: [],
+                async: true
+            };
+
+            newContents += `
+                ${exp.ln}.$$typeof = Symbol.for('react.client.reference');
+                ${exp.ln}.$$id = ${JSON.stringify(key)};
+            `
+        }
+        await writeFile(file.path, newContents);
     });
 }
 

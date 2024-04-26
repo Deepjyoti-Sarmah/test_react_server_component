@@ -12,10 +12,16 @@
     "license": "ISC",
     "dependencies": {
         "@hono/node-server": "^1.11.1",
+        "es-module-lexer": "^1.5.0",
         "esbuild": "^0.20.2",
         "hono": "^4.2.7",
         "react": "18.3.0-next-3706edb81-20230308",
         "react-dom": "18.3.0-next-3706edb81-20230308",
         "react-server-dom-webpack": "0.0.0-experimental-41b4714f1-20230328"
+    },
+    "devDependencies": {
+        "@types/node": "^18.15.11",
+        "@types/react": "^18.0.31",
+        "@types/react-dom": "^18.0.11"
     }
 }
